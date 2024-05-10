@@ -12,47 +12,53 @@ server {
     include /config/nginx/ssl.conf;
 
     root /app/www/public;
-    index doku.php;
 
-    location ~ /(conf/|bin/|inc/|vendor/) {
+    error_log  /tmp/nginx-error-debug.log debug;
+    access_log  /tmp/nginx-access.log combined;
+    rewrite_log on;
+
+    location ~ /wiki/(conf/|bin/|inc/|vendor/) {
         deny all;
     }
 
     #Support for X-Accel-Redirect
-    location ~ ^/data/ {
+    location ~ ^/wiki/data/ {
         internal ;
     }
 
-    location ~ ^/lib.*\.(js|css|gif|png|ico|jpg|jpeg)$ {
+    location ~ ^/wiki/lib.*\.(js|css|gif|png|ico|jpg|jpeg)$ {
         expires 365d;
     }
 
-    location / {
+    location /wiki/ {
+        root /app/www/public/;
+        index doku.php;
         try_files $uri $uri/ @dokuwiki;
+
+        location ~ ^(.+\.php)(.*)$ {
+            # enable the next two lines for http auth
+            #auth_basic "Restricted";
+            #auth_basic_user_file /config/nginx/.htpasswd;
+
+            fastcgi_split_path_info ^(.+\.php)(.*)$;
+            if (!-f $document_root$fastcgi_script_name) { return 404; }
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_index index.php;
+            include /etc/nginx/fastcgi_params;
+        }
+
+
+        # deny access to .htaccess/.htpasswd files
+        location ~ /\.ht {
+            deny all;
+        }
     }
 
     location @dokuwiki {
         # rewrites "doku.php/" out of the URLs if you set the userwrite setting to .htaccess in dokuwiki config page
-        rewrite ^/_media/(.*) /lib/exe/fetch.php?media=$1 last;
-        rewrite ^/_detail/(.*) /lib/exe/detail.php?media=$1 last;
-        rewrite ^/_export/([^/]+)/(.*) /doku.php?do=export_$1&id=$2 last;
-        rewrite ^/(.*) /doku.php?id=$1&$args last;
-    }
-
-    location ~ ^(.+\.php)(.*)$ {
-        # enable the next two lines for http auth
-        #auth_basic "Restricted";
-        #auth_basic_user_file /config/nginx/.htpasswd;
-
-        fastcgi_split_path_info ^(.+\.php)(.*)$;
-        if (!-f $document_root$fastcgi_script_name) { return 404; }
-        fastcgi_pass 127.0.0.1:9000;
-        fastcgi_index index.php;
-        include /etc/nginx/fastcgi_params;
-    }
-
-    # deny access to .htaccess/.htpasswd files
-    location ~ /\.ht {
-        deny all;
+        rewrite ^/wiki/_media/(.*) /wiki/lib/exe/fetch.php?media=$1 last;
+        rewrite ^/wiki/_detail/(.*) /wiki/lib/exe/detail.php?media=$1 last;
+        rewrite ^/wiki/_export/([^/]+)/(.*) /wiki/doku.php?do=export_$1&id=$2 last;
+        rewrite ^/wiki/(.*) /wiki/doku.php?id=$1&$args last;
     }
 }
